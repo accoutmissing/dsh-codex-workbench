@@ -32,10 +32,12 @@ This plugin turns that record into a table: which dispatch, in which directory, 
 
 | Entry | Seat | Notes |
 | --- | --- | --- |
-| Floating card | `shell.overlay` | Collapsed it is a pill, "Dispatch desk · N running"; clicking expands the card. Auto-expands while something runs |
+| Floating card | `shell.overlay` | Collapsed it is a pill, "Dispatch desk · N running"; clicking expands the card. Auto-expands while something runs. Draggable — the card opens from wherever the pill is |
 | Right sidebar tab | `sidebar.right.pane.tab` + `.title` | The full list (untruncated) plus four filter chips: All / Dispatch / Review / Subagent |
 
 - Your choice is remembered: once collapsed by hand it stops opening itself (kept in `localStorage`).
+- The pill's position is remembered too — as a **top-left point**, not as an offset from the bottom-right corner: an offset walks off-screen when the window shrinks.
+- While open the pill **stays where it was** and turns into "Collapse": the way out is the way in, so closing never means hunting for a button inside the card.
 - Expanding a row shows the task text, the working directory, the last reply, and the produced files (newest first).
 - If the page's client bundle is older than the file on disk, a bar appears: "Interface code changed · reload". One click, no guessing whether the edit took.
 
@@ -61,9 +63,10 @@ Incremental by `size + mtime`: unchanged files are never re-read. Scans are sing
 | Action | Result |
 | --- | --- |
 | Click the pill | Expand / collapse the card |
+| Drag the pill | Move it inside the window; the card follows, and the position is written on release |
 | Click a row | Expand / collapse that dispatch's detail |
 | Filter chips | Filter by `thread_source`; counts in parentheses |
-| "Collapse" in the header | Affects the floating card only, and the choice is remembered |
+| The pill while open (it reads "Collapse") | Collapse the card, back onto the pill's own spot |
 | "Interface code changed" bar | Reload the page to pick up a new client bundle |
 
 ## Routes

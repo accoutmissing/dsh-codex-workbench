@@ -3,7 +3,7 @@ window.__ModuleLoader__.load({
   factory: (require) => {
     const React = require('react')
     const h = React.createElement
-    const { useCallback, useEffect, useState } = React
+    const { useCallback, useEffect, useRef, useState } = React
 
     const STATE_ROUTE = '/plugins/codex-workbench/state'
     const FILES_ROUTE = '/plugins/codex-workbench/files'
@@ -134,11 +134,16 @@ window.__ModuleLoader__.load({
 .cw-pill{position:fixed;right:16px;bottom:16px;z-index:var(--cw-layer);display:flex;align-items:center;gap:7px;
   padding:6px 11px;border-radius:999px;border:1px solid var(--cw-line);
   background-color:var(--cw-base);background-image:linear-gradient(var(--cw-surface),var(--cw-surface));
-  color:var(--cw-t2);font-family:var(--cw-sans);font-size:11.5px;line-height:1.4;cursor:pointer;
+  color:var(--cw-t2);font-family:var(--cw-sans);font-size:11.5px;line-height:1.4;
+  /* The pill is the handle: dragging must not select its label or scroll the page. */
+  cursor:grab;touch-action:none;user-select:none;
   box-shadow:var(--dsw-alias-shadow-lv2,0 8px 24px rgba(0,0,0,.26));
   transition:color var(--cw-feedback),border-color var(--cw-feedback),transform var(--cw-feedback)}
 .cw-pill:hover{color:var(--cw-t1);border-color:var(--cw-accent);transform:translateY(-1px)}
 .cw-pill:active{transform:translateY(0) scale(.98)}
+/* While dragging the pill stops being a button that lifts on hover: it is being carried. */
+.cw-pill[data-dragging="1"],.cw-pill[data-dragging="1"]:hover,.cw-pill[data-dragging="1"]:active{
+  cursor:grabbing;transform:none}
 .cw-dot{width:6px;height:6px;border-radius:999px;flex:none;background:var(--cw-t3);box-sizing:border-box;
   transition:background var(--cw-feedback),border-color var(--cw-feedback)}
 .cw-dot[data-state="running"]{background:var(--cw-accent);
@@ -148,6 +153,11 @@ window.__ModuleLoader__.load({
    hue to tell apart at 6px, so the state is also encoded by fill rather than colour alone. */
 .cw-dot[data-state="stale"]{background:transparent;border:1.5px solid var(--cw-warn)}
 @keyframes cw-breath{from{box-shadow:0 0 0 0 var(--cw-tint)}to{box-shadow:0 0 0 4px transparent}}
+/* Open, the pill is the way back out: it keeps the exact spot it was clicked on
+   and says so, instead of hiding behind the card it opened. */
+.cw-pill[data-open="1"]{border-color:var(--cw-line);color:var(--cw-t2)}
+.cw-pillaction{display:inline-flex;align-items:center;gap:5px}
+.cw-pillglyph{flex:none;opacity:.75}
 .cw-card{position:fixed;right:16px;bottom:16px;z-index:var(--cw-layer);width:384px;max-height:min(62vh,540px);
   display:flex;flex-direction:column;border-radius:12px;border:1px solid var(--cw-line);
   background-color:var(--cw-base);background-image:linear-gradient(var(--cw-surface),var(--cw-surface));
@@ -245,9 +255,121 @@ window.__ModuleLoader__.load({
       }
     }
 
+    /**
+     * The pill is the handle for a panel that has to stay reachable, so it moves.
+     *
+     * Position is stored as the pill's own top-left corner, not as "distance from
+     * the bottom right": a stored corner keeps its meaning when the window
+     * resizes, whereas an offset from the far corner would drift with the viewport
+     * and could end up off-screen on a smaller window.
+     */
+    const POS_KEY = 'dsh-codex-workbench:pos'
+    /** Movement under this many pixels is a click, not a drag — a mouse shakes. */
+    const DRAG_SLOP = 3
+    const EDGE_MARGIN = 8
+    const CARD_W = 384
+    const CARD_MIN_H = 140
+    const CARD_MAX_H = 540
+    const PILL_W_FALLBACK = 150
+    const PILL_H_FALLBACK = 30
+
+    function viewport() {
+      return {
+        w: typeof window.innerWidth === 'number' && window.innerWidth > 0 ? window.innerWidth : 1280,
+        h: typeof window.innerHeight === 'number' && window.innerHeight > 0 ? window.innerHeight : 800
+      }
+    }
+
+    function readPos() {
+      try {
+        const raw = window.localStorage.getItem(POS_KEY)
+        if (raw === null) return null
+        const parsed = JSON.parse(raw)
+        if (parsed === null || typeof parsed !== 'object') return null
+        if (!Number.isFinite(parsed.x) || !Number.isFinite(parsed.y)) return null
+        return { x: parsed.x, y: parsed.y }
+      } catch {
+        return null
+      }
+    }
+
+    function writePos(pos) {
+      try {
+        if (pos === null) window.localStorage.removeItem(POS_KEY)
+        else window.localStorage.setItem(POS_KEY, JSON.stringify({ x: Math.round(pos.x), y: Math.round(pos.y) }))
+      } catch {
+        /* remembering is a nicety; moving must not depend on it */
+      }
+    }
+
+    /** Keep the whole pill inside the window, so it can always be grabbed again. */
+    function clampRect(rect) {
+      const vp = viewport()
+      const width = rect.w > 0 ? rect.w : PILL_W_FALLBACK
+      const height = rect.h > 0 ? rect.h : PILL_H_FALLBACK
+      return {
+        x: Math.max(EDGE_MARGIN, Math.min(rect.x, vp.w - width - EDGE_MARGIN)),
+        y: Math.max(EDGE_MARGIN, Math.min(rect.y, vp.h - height - EDGE_MARGIN)),
+        w: width,
+        h: height
+      }
+    }
+
+    /**
+     * Where the card goes, given where the pill is.
+     *
+     * The card is anchored to the pill rather than to a corner of the window: it
+     * opens towards the space the pill is *not* in (above when the pill sits low,
+     * below when it sits high) and aligns to the pill's side of the window. That
+     * keeps the handle and the thing it opened adjacent, which is what makes a
+     * floating window feel like it belongs to its button.
+     */
+    function cardPlacement(pill) {
+      const vp = viewport()
+      const centredX = pill.x + pill.w / 2
+      const centredY = pill.y + pill.h / 2
+      const rightAligned = centredX > vp.w / 2
+      const above = centredY > vp.h / 2
+      const wanted = rightAligned ? pill.x + pill.w - CARD_W : pill.x
+      const left = Math.max(EDGE_MARGIN, Math.min(wanted, vp.w - CARD_W - EDGE_MARGIN))
+      const width = Math.max(CARD_MIN_H, Math.min(CARD_W, vp.w - EDGE_MARGIN * 2))
+      const style = {
+        left: `${Math.round(left)}px`,
+        right: 'auto',
+        width: `${Math.round(width)}px`,
+        maxWidth: `${Math.round(vp.w - EDGE_MARGIN * 2)}px`,
+        transformOrigin: `${rightAligned ? '100%' : '0%'} ${above ? '100%' : '0%'}`
+      }
+      if (above) {
+        const room = pill.y - EDGE_MARGIN * 2
+        style.top = 'auto'
+        style.bottom = `${Math.round(Math.max(EDGE_MARGIN, vp.h - pill.y + EDGE_MARGIN))}px`
+        style.maxHeight = `${Math.round(Math.max(CARD_MIN_H, Math.min(CARD_MAX_H, room)))}px`
+      } else {
+        const bottom = pill.y + pill.h
+        const room = vp.h - bottom - EDGE_MARGIN * 2
+        style.bottom = 'auto'
+        style.top = `${Math.round(Math.min(bottom + EDGE_MARGIN, vp.h - CARD_MIN_H))}px`
+        style.maxHeight = `${Math.round(Math.max(CARD_MIN_H, Math.min(CARD_MAX_H, room)))}px`
+      }
+      return style
+    }
+
+    /** The pill's rect when nothing has been measured yet: where CSS puts it by default. */
+    function defaultPillRect(pos) {
+      if (pos !== null) return { x: pos.x, y: pos.y, w: PILL_W_FALLBACK, h: PILL_H_FALLBACK }
+      const vp = viewport()
+      return {
+        x: vp.w - 16 - PILL_W_FALLBACK,
+        y: vp.h - 16 - PILL_H_FALLBACK,
+        w: PILL_W_FALLBACK,
+        h: PILL_H_FALLBACK
+      }
+    }
+
     /** One store per page load, so a re-mounted slot keeps its answer and its open state. */
     const store = {
-      snap: { data: null, error: null, open: readOpen(), manual: false },
+      snap: { data: null, error: null, open: readOpen(), manual: false, pos: readPos() },
       listeners: new Set(),
       busy: false,
       get() {
@@ -433,11 +555,51 @@ window.__ModuleLoader__.load({
     function Panel({ t }) {
       const [snap, setSnap] = useState(store.get())
       const [selected, setSelected] = useState(null)
+      // Where the pill is, so the card can be placed next to it. Measured while the
+      // pill is on screen; remembered through the open state because opening hides it.
+      const [rect, setRect] = useState(() => clampRect(defaultPillRect(store.get().pos)))
+      const [dragging, setDragging] = useState(false)
+      const pillRef = useRef(null)
+      const drag = useRef(null)
+      // Whether this gesture has moved past the slop. A ref, not state: `pointerup`
+      // reads it in the same tick as the last `pointermove`, and a state update
+      // would not have landed yet — the pill would then open itself after a drag.
+      const moved = useRef(false)
+      const suppressClick = useRef(false)
 
       useEffect(() => {
         setSnap(store.get())
         return store.subscribe(setSnap)
       }, [])
+
+      // Measure after the pill renders: its width depends on the label, and a
+      // guessed width would place the card a few pixels off from its handle.
+      useEffect(() => {
+        const el = pillRef.current
+        if (el === null || typeof el.getBoundingClientRect !== 'function') return
+        const box = el.getBoundingClientRect()
+        if (box.width <= 0 || box.height <= 0) return
+        setRect((prev) =>
+          prev.x === box.left && prev.y === box.top && prev.w === box.width && prev.h === box.height
+            ? prev
+            : { x: box.left, y: box.top, w: box.width, h: box.height }
+        )
+      }, [snap.open, snap.pos])
+
+      // A window that shrank can strand the pill outside itself; pull it back.
+      useEffect(() => {
+        const onResize = () => {
+          const pos = store.get().pos
+          if (pos === null) return
+          const next = clampRect({ x: pos.x, y: pos.y, w: rect.w, h: rect.h })
+          if (next.x !== pos.x || next.y !== pos.y) {
+            store.patch({ pos: { x: next.x, y: next.y } })
+            writePos(next)
+          }
+        }
+        window.addEventListener('resize', onResize)
+        return () => window.removeEventListener('resize', onResize)
+      }, [rect.w, rect.h])
 
       const data = snap.data
       const sessions = data !== null && Array.isArray(data.sessions) ? data.sessions : []
@@ -464,21 +626,117 @@ window.__ModuleLoader__.load({
         void store.refresh()
       }, [])
 
-      if (!snap.open) {
-        return h(
-          'button',
-          { type: 'button', className: 'cw-pill', onClick: toggle, title: t('overlay') },
-          h('span', { className: 'cw-dot', 'data-state': running > 0 ? 'running' : 'done' }),
-          h('span', null, running > 0 ? `${t('title')} · ${running} ${t('running')}` : t('title')),
-          h('span', null, sessions.length > 0 ? String(sessions.length) : '')
-        )
-      }
+      const onPointerDown = useCallback((event) => {
+        if (event.button !== 0 && event.pointerType === 'mouse') return
+        const el = event.currentTarget
+        const box = el.getBoundingClientRect()
+        drag.current = {
+          id: event.pointerId,
+          x0: event.clientX,
+          y0: event.clientY,
+          left0: box.left,
+          top0: box.top,
+          w: box.width,
+          h: box.height
+        }
+        suppressClick.current = false
+        moved.current = false
+        try {
+          el.setPointerCapture(event.pointerId)
+        } catch {
+          /* capture is an optimisation: without it the drag still follows the pointer */
+        }
+      }, [])
+
+      const onPointerMove = useCallback((event) => {
+        const state = drag.current
+        if (state === null || state.id !== event.pointerId) return
+        const dx = event.clientX - state.x0
+        const dy = event.clientY - state.y0
+        if (!moved.current) {
+          if (Math.abs(dx) + Math.abs(dy) < DRAG_SLOP) return
+          moved.current = true
+          setDragging(true)
+        }
+        const next = clampRect({ x: state.left0 + dx, y: state.top0 + dy, w: state.w, h: state.h })
+        store.patch({ pos: { x: next.x, y: next.y } })
+      }, [])
+
+      const endDrag = useCallback((event) => {
+        const state = drag.current
+        if (state === null) return
+        drag.current = null
+        const carried = moved.current
+        moved.current = false
+        setDragging(false)
+        try {
+          event.currentTarget.releasePointerCapture(state.id)
+        } catch {
+          /* already released */
+        }
+        if (carried) {
+          suppressClick.current = true
+          writePos(store.get().pos)
+        }
+      }, [])
+
+      const onClick = useCallback((event) => {
+        // A drag ends with a click event on the same element; without this the pill
+        // would open the panel every time it was moved.
+        if (suppressClick.current) {
+          suppressClick.current = false
+          event.preventDefault()
+          return
+        }
+        toggle()
+      }, [toggle])
+
+      const placed = snap.pos
+      const pillStyle = placed === null ? undefined : { left: `${Math.round(placed.x)}px`, top: `${Math.round(placed.y)}px`, right: 'auto', bottom: 'auto' }
+
+      // The pill stays mounted while the card is open, and it turns into the
+      // collapse control in place. That is what was asked for: the way back out
+      // sits exactly where the panel was opened, so closing never means hunting
+      // for a button inside the card. It is also the handle the card is anchored
+      // to, which keeps both of them in one place while dragging.
+      const pill = h(
+        'button',
+        {
+          type: 'button',
+          ref: pillRef,
+          className: 'cw-pill',
+          style: pillStyle,
+          'data-dragging': dragging ? '1' : '0',
+          'data-open': snap.open ? '1' : '0',
+          onClick,
+          onPointerDown,
+          onPointerMove,
+          onPointerUp: endDrag,
+          onPointerCancel: endDrag,
+          title: snap.open ? t('collapse') : t('overlay')
+        },
+        h('span', { className: 'cw-dot', 'data-state': running > 0 ? 'running' : 'done' }),
+        snap.open
+          ? h('span', { className: 'cw-pillaction' }, collapseGlyph(), t('collapse'))
+          : h(
+              'span',
+              null,
+              running > 0 ? `${t('title')} · ${running} ${t('running')}` : t('title'),
+              sessions.length > 0 ? ` ${sessions.length}` : ''
+            )
+      )
+
+      if (!snap.open) return pill
 
       const shown = sessions.slice(0, ROW_LIMIT)
 
       return h(
+        React.Fragment,
+        null,
+        pill,
+        h(
         'div',
-        { className: 'cw-card' },
+        { className: 'cw-card', style: cardPlacement(rect) },
         h(
           'div',
           { className: 'cw-head' },
@@ -487,8 +745,7 @@ window.__ModuleLoader__.load({
             data === null
               ? t('loading')
               : t('scanned').replace('{scanned}', String(data.scanned ?? 0)) +
-                (data.skipped > 0 ? ` · +${data.skipped}` : '')),
-          h('button', { type: 'button', className: 'cw-btn', onClick: toggle }, t('collapse'))
+                (data.skipped > 0 ? ` · +${data.skipped}` : ''))
         ),
         data !== null && typeof data.clientStamp === 'number' && data.clientStamp > LOADED_AT + CLOCK_SLACK_MS
           ? h(
@@ -524,6 +781,7 @@ window.__ModuleLoader__.load({
                   )
                 )
         )
+        )
       )
     }
 
@@ -539,6 +797,26 @@ window.__ModuleLoader__.load({
         row(3.2, 1),
         row(7.2, 0.75),
         row(11.2, 0.5)
+      )
+    }
+
+    /**
+     * A chevron for the pill's open state, drawn inline so the handle needs no icon package.
+     * It points at the card, which is always the nearer side, so "collapse" reads as
+     * "fold this back into the pill" rather than as a generic close cross.
+     */
+    function collapseGlyph() {
+      return h(
+        'svg',
+        { width: 9, height: 9, viewBox: '0 0 9 9', className: 'cw-pillglyph', 'aria-hidden': 'true' },
+        h('path', {
+          d: 'M1.5 5.5L4.5 2.5L7.5 5.5',
+          fill: 'none',
+          stroke: 'currentColor',
+          strokeWidth: 1.4,
+          strokeLinecap: 'round',
+          strokeLinejoin: 'round'
+        })
       )
     }
 

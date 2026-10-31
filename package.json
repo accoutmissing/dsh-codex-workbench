@@ -1,6 +1,6 @@
 {
   "name": "@local/dsh-codex-workbench",
-  "version": "0.3.2",
+  "version": "0.4.0",
   "private": true,
   "type": "module",
   "description": "See every Codex dispatch at a glance: one row per rollout with directory, task, elapsed time, tokens and status — as a floating card and as a right-sidebar tab.",

@@ -2,6 +2,20 @@
 
 Why each version exists, not just what changed.
 
+## 0.4.0 — 2026-10-31
+
+**The panel lived in a corner, so moving it was impossible and closing it meant hunting.**
+
+Two things were asked for, in this order: make the pill draggable and open the card next to it; then make collapsing land back on the pill's own spot.
+
+- **The pill is the handle.** It is dragged with pointer capture, moved in the viewport's top-left coordinate space (not as an offset from the bottom-right corner — an offset drifts off-screen when the window shrinks, a point does not), clamped inside an 8px margin, and the position is written to `localStorage` **on release only**. Writing on every pointer move would put a disk write inside the drag loop.
+- **The card is anchored to the pill, not to the corner.** It opens away from the nearest edges (up when the pill is in the lower half, down otherwise; left/right likewise), and `transform-origin` follows the direction so the card grows out of the pill instead of materialising next to it.
+- **The pill stays mounted while the card is open and turns into the collapse control in place.** That is the whole point of the second request: the way back out is where you came in. The card lost its own 收起 button as a result — one control, in the place the hand already went.
+- A drag ends with a click on the same element, and React state updates are batched, so "was this a drag or a click?" is held in a **ref**, not state. Reading a state flag in `pointerup` gives the value from the previous render, which made a dragged pill spring open and skip the position write.
+- Dragging while open keeps working: the card follows, because placement is derived from the measured pill rect on every render.
+
+Verification is mechanical, since the app could not be driven directly (`dsh web` refuses the bare host without its printed URL): `placement-test.mjs` (18 assertions on the pure geometry), `drag-test.mjs` (36 assertions on the gesture, persistence, and the pill-as-collapse behaviour), `render-test.mjs`, the 46-assertion style audit, and a static preview rendered from the production bundle.
+
 ## 0.3.2 — 2026-10-31
 
 **The panel was see-through, and the cause was one token used as the wrong kind of value.**
