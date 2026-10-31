@@ -166,17 +166,38 @@ function finite(value) {
 }
 
 /**
- * The manifest version, read once: it answers "did my edit actually get loaded"
- * faster than any log line, because a stale host module generation keeps serving
- * the version it started with.
+ * Two versions, on purpose.
+ *
+ * `LOADED_VERSION` is what this host module generation started with: it never
+ * changes, so a stale generation keeps answering with its own number and you can
+ * see that the reload did not happen.
+ *
+ * `manifestVersion()` reads the manifest on disk, re-reading only when its mtime
+ * moves. Reporting that as `version` keeps the answer honest about the artifact
+ * itself; comparing the two tells "the file on disk is old" (equal) from "the
+ * module is old" (different).
  */
-const VERSION = (() => {
+const LOADED_VERSION = (() => {
   try {
     return JSON.parse(readFileSync(PACKAGE_FILE, 'utf8')).version ?? null
   } catch {
     return null
   }
 })()
+
+let manifestCache = { mtimeMs: -1, version: LOADED_VERSION }
+
+function manifestVersion() {
+  try {
+    const { mtimeMs } = statSync(PACKAGE_FILE)
+    if (mtimeMs === manifestCache.mtimeMs) return manifestCache.version
+    const version = JSON.parse(readFileSync(PACKAGE_FILE, 'utf8')).version ?? null
+    manifestCache = { mtimeMs, version }
+    return version
+  } catch {
+    return manifestCache.version
+  }
+}
 
 /**
  * A page that loaded before this plugin's bundle was rebuilt keeps running the
@@ -591,7 +612,8 @@ export function apply(ctx) {
             lookbackDays: LOOKBACK_DAYS,
             scanned: scanResult.files,
             skipped: scanResult.skipped,
-            version: VERSION,
+            version: manifestVersion(),
+            loadedVersion: LOADED_VERSION,
             scannedAt: lastScanAt,
             clientStamp: clientStamp(),
             client: describeClient(ctx),

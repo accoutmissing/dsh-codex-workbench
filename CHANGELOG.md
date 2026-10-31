@@ -2,6 +2,16 @@
 
 Why each version exists, not just what changed.
 
+## 0.3.1 — 2026-10-31
+
+**The pill was sitting underneath other plugins' cards.**
+
+Every registration in the host's overlay layer is a sibling, so they stack by `z-index` alone. Measured here, siblings go up to **10000** (`dsh-prompt`, `dshmarket`); this pill was at **42**, which is why it kept disappearing behind them. Both card and pill now sit at `100000`. That number is only relative to the overlay layer — the layer's own stacking context keeps the panel below the host's dialogs (which live at 1000–1100 in a different layer).
+
+The style audit now asserts that *both* overlay states declare a `z-index` above that measured ceiling, so the value cannot regress quietly.
+
+**Version reporting split in two.** `/state` used to report a version read once at module load, so after bumping the manifest the route still answered the old number while the disk already said otherwise — indistinguishable from "the reload failed". Now `version` is the manifest on disk (re-read when its mtime moves) and `loadedVersion` is what this host module generation started with: equal means you are running the artifact on disk, different means the module is stale.
+
 ## 0.3.0 — 2026-10-31
 
 **The panel now reads the skin instead of carrying its own palette.**

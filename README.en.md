@@ -83,6 +83,7 @@ Colours and motion follow the active skin (here `dsh-claude-style`) rather than 
 - Hairlines are 0.5px, radii stay on the 4 / 6 / 8 / 12 / 16 / 999 ladder, and focus uses the host's `--dsw-focus-ring-color` rather than the accent.
 - Motion uses the skin's duration and easing tokens only: the card enters on `ease-enter`, rows stagger in (groups of 8, `duration-instant / 8` apart), the running dot breathes on `duration-fade × 8`. `prefers-reduced-motion` turns it all off.
 - **State is not colour-only**: running is a filled accent dot with a breathing ring, finished is a flat grey dot, stuck is a **hollow ring** — terracotta and amber are too close at 6px, so shape carries part of the meaning.
+- The card and pill are **siblings** in the host's overlay layer and stack by `z-index` alone: neighbouring plugins here measure up to 10000, so this one uses 100000 to sit above them. That does not cover the host's dialogs, which live in a different layer at 1000–1100.
 
 ## Install
 
@@ -97,7 +98,7 @@ plugin_manager({ action: 'install_bundle',
 - `application: "applied"` means it took; on `failed`, read `warnings`.
 - **Reload the page** (Ctrl+R) afterwards — that is when the new client bundle mounts.
 - Editing the plugin does not need a restart: `plugin_manager({ action:'set_plugin', target:'include:dsh-codex-workbench', enabled:false })` then `enabled:true` (the entry id is not the package name).
-- Self-check: in `GET /plugins/codex-workbench/state`, `version` must be the version you just wrote and `clientStamp` must equal the mtime of `client.js`.
+- Self-check: in `GET /plugins/codex-workbench/state`, `version` must be the version you just wrote to `package.json` and `loadedVersion` the one this host module generation started with (a difference means the module did not reload); `clientStamp` must equal the mtime of `client.js`.
 
 ## Compatibility and limits
 

@@ -121,7 +121,11 @@ window.__ModuleLoader__.load({
   --cw-instant:var(--dsh-claude-duration-instant,80ms);
   --cw-breath:calc(var(--dsh-claude-duration-fade,300ms) * 8)
 }
-.cw-pill{position:fixed;right:16px;bottom:16px;z-index:42;display:flex;align-items:center;gap:7px;
+/* Every registration in this overlay layer is a sibling, so they stack by z-index alone: measured
+   siblings here go up to 10000 (dsh-prompt, dshmarket), and at 42 this pill sat underneath them.
+   Staying above that range only reorders us inside the host's own overlay layer — the layer's own
+   stacking context keeps us below the host's dialogs (which live at 1000-1100 in a different layer). */
+.cw-pill{position:fixed;right:16px;bottom:16px;z-index:100000;display:flex;align-items:center;gap:7px;
   padding:6px 11px;border-radius:999px;border:1px solid var(--cw-line);background:var(--cw-surface);
   color:var(--cw-t2);font-family:var(--cw-sans);font-size:11.5px;line-height:1.4;cursor:pointer;
   box-shadow:var(--dsw-alias-shadow-lv2,0 8px 24px rgba(0,0,0,.26));
@@ -137,7 +141,7 @@ window.__ModuleLoader__.load({
    hue to tell apart at 6px, so the state is also encoded by fill rather than colour alone. */
 .cw-dot[data-state="stale"]{background:transparent;border:1.5px solid var(--cw-warn)}
 @keyframes cw-breath{from{box-shadow:0 0 0 0 var(--cw-tint)}to{box-shadow:0 0 0 4px transparent}}
-.cw-card{position:fixed;right:16px;bottom:16px;z-index:42;width:384px;max-height:min(62vh,540px);
+.cw-card{position:fixed;right:16px;bottom:16px;z-index:100000;width:384px;max-height:min(62vh,540px);
   display:flex;flex-direction:column;border-radius:12px;border:1px solid var(--cw-line);
   background:var(--cw-surface);color:var(--cw-t1);font-family:var(--cw-sans);font-size:12px;line-height:1.5;
   box-shadow:var(--dsw-alias-shadow-lv2,0 16px 44px rgba(0,0,0,.3));overflow:hidden;transform-origin:100% 100%;

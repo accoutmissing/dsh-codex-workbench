@@ -83,6 +83,7 @@
 - 分隔线 0.5px，圆角取 4 / 6 / 8 / 12 / 16 / 999 梯子，focus 用宿主 `--dsw-focus-ring-color` 而不是强调色。
 - 动效只用皮肤的时长与曲线 token：卡片进场 `ease-enter`，行错峰进场（每组 8 行，间隔 `duration-instant / 8`），运行中的状态点用 `duration-fade × 8` 的呼吸环；`prefers-reduced-motion` 下全部关掉。
 - **状态不只靠颜色**：运行中是实心强调色 + 呼吸环，已结束是灰色实心，卡住是**空心环**——陶土色与琥珀色在 6px 尺寸上太接近，所以形状也参与编码。
+- 浮卡与胶囊在宿主浮层里是**平级兄弟**，只按 `z-index` 排序：本机实测相邻插件用到 10000，所以这里用 100000 才能压在它们之上；这不会盖住宿主的对话框（对话框在另一层，1000–1100）。
 
 ## 安装
 
@@ -97,7 +98,7 @@ plugin_manager({ action: 'install_bundle',
 - 返回 `application: "applied"` 才算生效；`failed` 时看 `warnings`。
 - 安装后**刷新页面**（Ctrl+R）才会挂上新的 client bundle。
 - 改了插件代码不重启也会生效：`plugin_manager({ action:'set_plugin', target:'include:dsh-codex-workbench', enabled:false })` 再 `enabled:true`（entry id 不是包名）。
-- 自检：`GET /plugins/codex-workbench/state` 里 `version` 是你刚改的版本、`clientStamp` 与 `client.js` 的 mtime 一致，才说明新代码真的加载了。
+- 自检：`GET /plugins/codex-workbench/state` 里 `version` 是你刚写进 `package.json` 的版本、`loadedVersion` 是当前这代宿主模块启动时的版本（两者不同说明宿主模块没重载）、`clientStamp` 与 `client.js` 的 mtime 一致，才说明新代码真的加载了。
 
 ## 兼容性与已知限制
 
