@@ -83,7 +83,8 @@ Colours and motion follow the active skin (here `dsh-claude-style`) rather than 
 - Hairlines are 0.5px, radii stay on the 4 / 6 / 8 / 12 / 16 / 999 ladder, and focus uses the host's `--dsw-focus-ring-color` rather than the accent.
 - Motion uses the skin's duration and easing tokens only: the card enters on `ease-enter`, rows stagger in (groups of 8, `duration-instant / 8` apart), the running dot breathes on `duration-fade × 8`. `prefers-reduced-motion` turns it all off.
 - **State is not colour-only**: running is a filled accent dot with a breathing ring, finished is a flat grey dot, stuck is a **hollow ring** — terracotta and amber are too close at 6px, so shape carries part of the meaning.
-- The card and pill are **siblings** in the host's overlay layer and stack by `z-index` alone: neighbouring plugins here measure up to 10000, so this one uses 100000 to sit above them. That does not cover the host's dialogs, which live in a different layer at 1000–1100.
+- **The panel is always opaque**: its surface is `--dsh-claude-card`, painted over an opaque base (`--dsw-alias-bg-base`), so even a skin that hands us a translucent surface cannot turn the card into a window. There is no `backdrop-filter`.
+- The card and pill are **siblings** in the host's overlay layer and stack by `z-index` alone: neighbouring plugins here measure up to 10000, so the level comes from the skin's `--dsh-claude-layer-float` (`99999`). That does not cover the host's dialogs, which live in a different layer at 1000–1100. Note that the whole `--dsh-claude-layer-*` family holds **stacking levels, not colours** — using one as a background invalidates the declaration.
 
 ## Install
 
@@ -98,7 +99,7 @@ plugin_manager({ action: 'install_bundle',
 - `application: "applied"` means it took; on `failed`, read `warnings`.
 - **Reload the page** (Ctrl+R) afterwards — that is when the new client bundle mounts.
 - Editing the plugin does not need a restart: `plugin_manager({ action:'set_plugin', target:'include:dsh-codex-workbench', enabled:false })` then `enabled:true` (the entry id is not the package name).
-- Self-check: in `GET /plugins/codex-workbench/state`, `version` must be the version you just wrote to `package.json` and `loadedVersion` the one this host module generation started with (a difference means the module did not reload); `clientStamp` must equal the mtime of `client.js`.
+- Self-check: in `GET /plugins/codex-workbench/state`, `version` must be the version you just wrote to `package.json`; `staleHost` must be `false` (i.e. `hostStamp` is not newer than `loadedAt`) for the running host module to be that file; `clientStamp` must equal the mtime of `client.js` for the browser half to have been replaced too.
 
 ## Compatibility and limits
 

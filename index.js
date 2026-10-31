@@ -18,6 +18,7 @@ const FILES_ROUTE = '/plugins/codex-workbench/files'
 /** Our own browser bundle: its mtime tells an already-open page that code moved. */
 const PACKAGE_FILE = fileURLToPath(new URL('./package.json', import.meta.url))
 const CLIENT_FILE = fileURLToPath(new URL('./client.js', import.meta.url))
+const INDEX_FILE = fileURLToPath(new URL('./index.js', import.meta.url))
 
 /** How far back a rollout still counts as "one of today's dispatches". */
 const LOOKBACK_DAYS = 3
@@ -166,26 +167,24 @@ function finite(value) {
 }
 
 /**
- * Two versions, on purpose.
+ * Is the running host module the one on disk?
  *
- * `LOADED_VERSION` is what this host module generation started with: it never
- * changes, so a stale generation keeps answering with its own number and you can
- * see that the reload did not happen.
+ * `version` is the manifest as it is on disk right now (re-read when its mtime
+ * moves), which is what a person means by "the version I just edited". Comparing
+ * it against a value captured at module load does not answer that question: a
+ * reload re-evaluates the same file and reports the same number, so "manifest
+ * changed" and "module is stale" look identical.
  *
- * `manifestVersion()` reads the manifest on disk, re-reading only when its mtime
- * moves. Reporting that as `version` keeps the answer honest about the artifact
- * itself; comparing the two tells "the file on disk is old" (equal) from "the
- * module is old" (different).
+ * So the staleness is measured the same way the browser half measures it — a
+ * timestamp against a file mtime. `LOADED_AT` is when this module was evaluated
+ * and `codeStamp` is `index.js`'s mtime; if the file is newer than the module,
+ * the running code is provably the old generation.
  */
-const LOADED_VERSION = (() => {
-  try {
-    return JSON.parse(readFileSync(PACKAGE_FILE, 'utf8')).version ?? null
-  } catch {
-    return null
-  }
-})()
+const LOADED_AT = Date.now()
+/** Same clock as the filesystem; a second of slack absorbs mtime rounding. */
+const LOAD_SLACK_MS = 1000
 
-let manifestCache = { mtimeMs: -1, version: LOADED_VERSION }
+let manifestCache = { mtimeMs: -1, version: null }
 
 function manifestVersion() {
   try {
@@ -207,6 +206,18 @@ function manifestVersion() {
 function clientStamp() {
   try {
     return statSync(CLIENT_FILE).mtimeMs
+  } catch {
+    return null
+  }
+}
+
+/**
+ * The host half's own mtime, the counterpart of `clientStamp`. Read from disk on
+ * every request so an edit made without a reload shows up as stale.
+ */
+function hostStamp() {
+  try {
+    return statSync(INDEX_FILE).mtimeMs
   } catch {
     return null
   }
@@ -613,7 +624,9 @@ export function apply(ctx) {
             scanned: scanResult.files,
             skipped: scanResult.skipped,
             version: manifestVersion(),
-            loadedVersion: LOADED_VERSION,
+            loadedAt: LOADED_AT,
+            hostStamp: hostStamp(),
+            staleHost: (hostStamp() ?? 0) > LOADED_AT + LOAD_SLACK_MS,
             scannedAt: lastScanAt,
             clientStamp: clientStamp(),
             client: describeClient(ctx),

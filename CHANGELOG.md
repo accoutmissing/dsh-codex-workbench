@@ -2,6 +2,24 @@
 
 Why each version exists, not just what changed.
 
+## 0.3.2 — 2026-10-31
+
+**The panel was see-through, and the cause was one token used as the wrong kind of value.**
+
+The card painted itself with `background: var(--dsh-claude-layer-float, …)`. That token is **`99999` — a z-index**, not a colour. Because the token *exists*, the fallback never applied, `99999` is not a valid `<color>`, and the whole declaration was dropped. Measured in the browser: that exact expression computes to `rgba(0, 0, 0, 0)`. Nothing was "set to a low opacity" — there was no background at all, so every row behind the panel showed through.
+
+Two things were wrong at once, and they had the same origin: I had assumed the `--dsh-claude-layer-*` family were surfaces, and picked the float one for both the surface colour and the stacking order. The family is entirely stacking levels (`chrome 30`, `control 10`, `float 99999`, `peek 40`, `picker 20`, `takeover 2147483000`); the surfaces are `--dsh-claude-card` / `--dsh-claude-canvas` / `--dsh-claude-chip`.
+
+So:
+
+- Surface now comes from `--dsh-claude-card`, and it is painted **over an opaque base** (`background-color: var(--cw-base); background-image: linear-gradient(var(--cw-surface), var(--cw-surface))`). Layering the colour instead of setting it means a skin that hands us a translucent surface still leaves the panel opaque — the panel is a floating card, and floating cards are not windows.
+- `backdrop-filter` is gone. Blur only makes sense if you intend to see through.
+- The stacking order still uses `--dsh-claude-layer-float`, which is the one thing that token is actually for.
+
+The audit grew from 37 to 46 assertions so this cannot come back: the surface token must not be a `layer` token, both overlay states must paint a base colour *and* the gradient, no `backdrop-filter` anywhere, and the `z-index` must still clear the measured 10000 ceiling.
+
+**Version reporting told a half-truth, so it was replaced by timestamps.** `loadedVersion` compared the manifest read at module load against the manifest on disk — which reads as "the module is stale" even when only `package.json` moved and the code is identical. `/state` now reports `version` (the manifest on disk), `loadedAt` (when this module generation was evaluated), `hostStamp` (`index.js`'s mtime) and `staleHost` (`hostStamp > loadedAt`). Same judgement the browser half already used for `clientStamp`, so both halves answer "am I running old code?" the same way.
+
 ## 0.3.1 — 2026-10-31
 
 **The pill was sitting underneath other plugins' cards.**
@@ -10,7 +28,7 @@ Every registration in the host's overlay layer is a sibling, so they stack by `z
 
 The style audit now asserts that *both* overlay states declare a `z-index` above that measured ceiling, so the value cannot regress quietly.
 
-**Version reporting split in two.** `/state` used to report a version read once at module load, so after bumping the manifest the route still answered the old number while the disk already said otherwise — indistinguishable from "the reload failed". Now `version` is the manifest on disk (re-read when its mtime moves) and `loadedVersion` is what this host module generation started with: equal means you are running the artifact on disk, different means the module is stale.
+**Version reporting split in two.** `/state` used to report a version read once at module load, so after bumping the manifest the route still answered the old number while the disk already said otherwise — indistinguishable from "the reload failed". This first attempt (`loadedVersion`) was replaced in 0.3.2: two version numbers cannot express staleness, because a reload re-evaluates the same file and reports the same number.
 
 ## 0.3.0 — 2026-10-31
 

@@ -98,7 +98,13 @@ window.__ModuleLoader__.load({
 
     const CSS = `
 .cw-pill,.cw-card,.cw-tab{
-  --cw-surface:var(--dsh-claude-layer-float,var(--dsw-alias-bg-layer-2,#1f1f1f));
+  /* --dsh-claude-layer-float is a Z-INDEX (99999), not a colour: using it as a background made the
+     declaration invalid, so the panel had no background at all and read as transparent. The card
+     surface token is --dsh-claude-card, and anything painted below still starts from an opaque base
+     so a translucent skin cannot bring the transparency back. */
+  --cw-layer:var(--dsh-claude-layer-float,99999);
+  --cw-surface:var(--dsh-claude-card,var(--dsw-alias-bg-overlay,#232323));
+  --cw-base:var(--dsw-alias-bg-base,var(--dsh-claude-canvas,#191919));
   --cw-fill:var(--dsw-alias-bg-layer-3,rgba(255,255,255,.045));
   --cw-hover:var(--dsw-alias-interactive-bg-hover,rgba(255,255,255,.06));
   --cw-line:var(--dsh-tone-border-1,var(--dsw-alias-border-l1,rgba(255,255,255,.12)));
@@ -122,11 +128,12 @@ window.__ModuleLoader__.load({
   --cw-breath:calc(var(--dsh-claude-duration-fade,300ms) * 8)
 }
 /* Every registration in this overlay layer is a sibling, so they stack by z-index alone: measured
-   siblings here go up to 10000 (dsh-prompt, dshmarket), and at 42 this pill sat underneath them.
-   Staying above that range only reorders us inside the host's own overlay layer — the layer's own
-   stacking context keeps us below the host's dialogs (which live at 1000-1100 in a different layer). */
-.cw-pill{position:fixed;right:16px;bottom:16px;z-index:100000;display:flex;align-items:center;gap:7px;
-  padding:6px 11px;border-radius:999px;border:1px solid var(--cw-line);background:var(--cw-surface);
+   siblings here go up to 10000 (dsh-prompt, dshmarket), so the panel takes the skin's float layer
+   token (99999). That only reorders us inside the host's own overlay layer — the layer's own
+   stacking context keeps us below the host's dialogs (1000-1100, a different layer). */
+.cw-pill{position:fixed;right:16px;bottom:16px;z-index:var(--cw-layer);display:flex;align-items:center;gap:7px;
+  padding:6px 11px;border-radius:999px;border:1px solid var(--cw-line);
+  background-color:var(--cw-base);background-image:linear-gradient(var(--cw-surface),var(--cw-surface));
   color:var(--cw-t2);font-family:var(--cw-sans);font-size:11.5px;line-height:1.4;cursor:pointer;
   box-shadow:var(--dsw-alias-shadow-lv2,0 8px 24px rgba(0,0,0,.26));
   transition:color var(--cw-feedback),border-color var(--cw-feedback),transform var(--cw-feedback)}
@@ -141,9 +148,10 @@ window.__ModuleLoader__.load({
    hue to tell apart at 6px, so the state is also encoded by fill rather than colour alone. */
 .cw-dot[data-state="stale"]{background:transparent;border:1.5px solid var(--cw-warn)}
 @keyframes cw-breath{from{box-shadow:0 0 0 0 var(--cw-tint)}to{box-shadow:0 0 0 4px transparent}}
-.cw-card{position:fixed;right:16px;bottom:16px;z-index:100000;width:384px;max-height:min(62vh,540px);
+.cw-card{position:fixed;right:16px;bottom:16px;z-index:var(--cw-layer);width:384px;max-height:min(62vh,540px);
   display:flex;flex-direction:column;border-radius:12px;border:1px solid var(--cw-line);
-  background:var(--cw-surface);color:var(--cw-t1);font-family:var(--cw-sans);font-size:12px;line-height:1.5;
+  background-color:var(--cw-base);background-image:linear-gradient(var(--cw-surface),var(--cw-surface));
+  color:var(--cw-t1);font-family:var(--cw-sans);font-size:12px;line-height:1.5;
   box-shadow:var(--dsw-alias-shadow-lv2,0 16px 44px rgba(0,0,0,.3));overflow:hidden;transform-origin:100% 100%;
   animation:cw-card-in var(--cw-enter) both}
 @keyframes cw-card-in{from{opacity:0;transform:translateY(8px) scale(.985)}
