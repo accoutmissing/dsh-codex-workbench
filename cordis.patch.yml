@@ -1,0 +1,3 @@
+- insert:
+    - id: dsh-codex-workbench
+      name: '@local/dsh-codex-workbench'

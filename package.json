@@ -1,0 +1,55 @@
+{
+  "name": "@local/dsh-codex-workbench",
+  "version": "0.3.0",
+  "private": true,
+  "type": "module",
+  "description": "See every Codex dispatch at a glance: one row per rollout with directory, task, elapsed time, tokens and status — as a floating card and as a right-sidebar tab.",
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "cordis",
+    "codex",
+    "sidebar",
+    "monitoring"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/accoutmissing/dsh-codex-workbench.git"
+  },
+  "homepage": "https://github.com/accoutmissing/dsh-codex-workbench#readme",
+  "bugs": {
+    "url": "https://github.com/accoutmissing/dsh-codex-workbench/issues"
+  },
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./icon": "./icon.svg",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "cordis.patch.yml",
+    "icon.svg",
+    "locale/*.json",
+    "README.md",
+    "README.en.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-slots",
+        "@deepseek-ai/dsh-client-locale"
+      ]
+    }
+  }
+}
