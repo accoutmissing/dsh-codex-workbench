@@ -2,6 +2,16 @@
 
 Why each version exists, not just what changed.
 
+## 0.4.1 — 2026-10-31
+
+胶囊本来能拖，但一旦拖进窗口最上面那一条，就再也抓不起来了——鼠标按下去是拖窗口，不是拖胶囊。
+
+- **那一条不是我们的画布。** 带自定义标题栏的窗口会在顶部铺一条 `-webkit-app-region: drag` 的系统拖动条（高度就是 `--dsh-windows-titlebar-height`，运行时写在 `documentElement` 上的内联值，40px）。落在里面的浮层收不到 pointer 事件——窗口先把按下吃掉了，所以它看起来好好的，只是点不动。
+- **壳自己的浮层也是这么躲的。** 它的定位夹取是 `Math.max(y, 标题栏高度 + 20)`，全屏不保留——这里照抄这个界，而不是自己发明一个数字。
+- **夹取之外再加一道保险。** 胶囊和卡片都写了 `-webkit-app-region: no-drag`：已经存在 localStorage 里、卡在上面的旧坐标也能被抓住拖出来。
+- **进页面就自愈一次。** 挂载时立刻跑一遍夹取，把旧版本存下来的非法坐标拉回合法位置并回写，而不是等人手动拖。
+- **旧位置不会把人卡死。** 夹取只在拖动与挂载时发生，`x` 完全不动——只修那条不该待的横带。
+
 ## 0.4.0 — 2026-10-31
 
 **The panel lived in a corner, so moving it was impossible and closing it meant hunting.**

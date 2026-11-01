@@ -137,6 +137,9 @@ window.__ModuleLoader__.load({
   color:var(--cw-t2);font-family:var(--cw-sans);font-size:11.5px;line-height:1.4;
   /* The pill is the handle: dragging must not select its label or scroll the page. */
   cursor:grab;touch-action:none;user-select:none;
+  /* The Windows title bar is an OS drag strip; a floating element parked on it must opt out,
+     or every press moves the window and the pill can never be picked up. */
+  -webkit-app-region:no-drag;app-region:no-drag;
   box-shadow:var(--dsw-alias-shadow-lv2,0 8px 24px rgba(0,0,0,.26));
   transition:color var(--cw-feedback),border-color var(--cw-feedback),transform var(--cw-feedback)}
 .cw-pill:hover{color:var(--cw-t1);border-color:var(--cw-accent);transform:translateY(-1px)}
@@ -162,6 +165,7 @@ window.__ModuleLoader__.load({
   display:flex;flex-direction:column;border-radius:12px;border:1px solid var(--cw-line);
   background-color:var(--cw-base);background-image:linear-gradient(var(--cw-surface),var(--cw-surface));
   color:var(--cw-t1);font-family:var(--cw-sans);font-size:12px;line-height:1.5;
+  -webkit-app-region:no-drag;app-region:no-drag;
   box-shadow:var(--dsw-alias-shadow-lv2,0 16px 44px rgba(0,0,0,.3));overflow:hidden;transform-origin:100% 100%;
   animation:cw-card-in var(--cw-enter) both}
 @keyframes cw-card-in{from{opacity:0;transform:translateY(8px) scale(.985)}
@@ -280,6 +284,39 @@ window.__ModuleLoader__.load({
       }
     }
 
+    /**
+     * The top strip of the window is not ours to drop a floating thing in.
+     *
+     * With the custom Windows title bar the shell paints an `-webkit-app-region: drag` strip
+     * over the top `--dsh-windows-titlebar-height` pixels (it sets that inline, 40px, on
+     * `documentElement`, together with `data-windows-titlebar`), and its own floating panels
+     * clamp to `Math.max(y, titlebar + 20)` — the same 20px breathing room. A pill parked in
+     * that strip stops receiving pointer events, because the window takes the press instead,
+     * so it looks fine and can never be grabbed again. Reading the inline token and the two
+     * attributes is what the shell's own drag code does, and it costs no style recalc on
+     * every pointer move; fullscreen has no drag strip, so nothing is reserved there.
+     */
+    function safeTop() {
+      const root = typeof document === 'object' && document !== null ? document.documentElement : null
+      if (root === null || root === undefined) return EDGE_MARGIN
+      const has = (name) => {
+        try {
+          return root.hasAttribute(name) === true
+        } catch {
+          return false
+        }
+      }
+      if (!has('data-windows-titlebar') || has('data-fullscreen')) return EDGE_MARGIN
+      let raw = ''
+      try {
+        raw = root.style !== undefined && root.style !== null ? root.style.getPropertyValue('--dsh-windows-titlebar-height') : ''
+      } catch {
+        raw = ''
+      }
+      const titlebar = parseFloat(raw)
+      return Number.isFinite(titlebar) && titlebar > 0 ? titlebar + 20 : EDGE_MARGIN
+    }
+
     function readPos() {
       try {
         const raw = window.localStorage.getItem(POS_KEY)
@@ -307,9 +344,10 @@ window.__ModuleLoader__.load({
       const vp = viewport()
       const width = rect.w > 0 ? rect.w : PILL_W_FALLBACK
       const height = rect.h > 0 ? rect.h : PILL_H_FALLBACK
+      const top = safeTop()
       return {
         x: Math.max(EDGE_MARGIN, Math.min(rect.x, vp.w - width - EDGE_MARGIN)),
-        y: Math.max(EDGE_MARGIN, Math.min(rect.y, vp.h - height - EDGE_MARGIN)),
+        y: Math.max(top, Math.min(rect.y, vp.h - height - EDGE_MARGIN)),
         w: width,
         h: height
       }
@@ -341,7 +379,7 @@ window.__ModuleLoader__.load({
         transformOrigin: `${rightAligned ? '100%' : '0%'} ${above ? '100%' : '0%'}`
       }
       if (above) {
-        const room = pill.y - EDGE_MARGIN * 2
+        const room = pill.y - safeTop()
         style.top = 'auto'
         style.bottom = `${Math.round(Math.max(EDGE_MARGIN, vp.h - pill.y + EDGE_MARGIN))}px`
         style.maxHeight = `${Math.round(Math.max(CARD_MIN_H, Math.min(CARD_MAX_H, room)))}px`
@@ -349,7 +387,7 @@ window.__ModuleLoader__.load({
         const bottom = pill.y + pill.h
         const room = vp.h - bottom - EDGE_MARGIN * 2
         style.bottom = 'auto'
-        style.top = `${Math.round(Math.min(bottom + EDGE_MARGIN, vp.h - CARD_MIN_H))}px`
+        style.top = `${Math.round(Math.max(safeTop(), Math.min(bottom + EDGE_MARGIN, vp.h - CARD_MIN_H)))}px`
         style.maxHeight = `${Math.round(Math.max(CARD_MIN_H, Math.min(CARD_MAX_H, room)))}px`
       }
       return style
@@ -598,6 +636,10 @@ window.__ModuleLoader__.load({
           }
         }
         window.addEventListener('resize', onResize)
+        // Also on mount: a position saved before the safe area existed (or before the title
+        // bar did) strands the pill in the OS drag strip, where it looks fine and cannot be
+        // grabbed. Pull it back once, on the way in, and persist the corrected spot.
+        onResize()
         return () => window.removeEventListener('resize', onResize)
       }, [rect.w, rect.h])
 
