@@ -2,6 +2,15 @@
 
 Why each version exists, not just what changed.
 
+## 0.4.2 — 2026-11-05
+
+**宿主升到 0.2.2-rc.1 后做了一轮兼容性复核：代码不用改，但清单该说的话要说上。**
+
+DSH 在**加载插件之前**就评估 `engines.dsh`（`dsh-app-boot` 里的 `evaluatePluginCompatibility`），不满足时连 import 都不会发生。没写这一条的插件在旧宿主上碰巧能用，但升级到不兼容的运行时就会毫无提示地消失——上一版补上了这条声明，这一版把它抬成正式版本，免得「tag 指向的清单」和仓库里真正跑的清单是两份东西。
+
+- **0.2.2-rc.1 实测全部照常工作**：`/plugins/codex-workbench/state` 返回 200，`scanned:131 / skipped:107`，会话条目带真实 `path` 与 `name`；`client.graphRev` 有值、`staleHost:false`；右栏标签 `codex-workbench` 在 `sidebar.right.pane.tab` 上 active。
+- **范围没动**：`>=0.2.0-rc.1 <0.3.0-0` 已经覆盖 0.2.2-rc.1。声明的作用是「不兼容时明确拒绝」，不是「把上限顶到最新」——把没测过的版本写进范围才是真正的风险。
+
 ## 0.4.1 — 2026-10-31
 
 胶囊本来能拖，但一旦拖进窗口最上面那一条，就再也抓不起来了——鼠标按下去是拖窗口，不是拖胶囊。
