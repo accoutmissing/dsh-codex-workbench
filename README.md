@@ -106,6 +106,7 @@ plugin_manager({ action: 'install_bundle',
 
 ## 兼容性与已知限制
 
+- **宿主 0.2.2-rc.5 已复核**（2026-11-20）：不改代码即可运行，证据见 [CHANGELOG](CHANGELOG.md) 的 0.4.3 条目。`engines.dsh` 仍是 `>=0.2.0-rc.1 <0.3.0-0`，按宿主口径（含预发布）覆盖 0.2.2-rc.5；用到的 `clientModules.graph()`（`WebBootGraph { rev, entries[].{id,rev,immediately} }`）、槽位 `sidebar.right.pane.tab` / `shell.overlay`、`sidebarRightTabs`、`ctx.webServer`、`ctx.locale` 在 rc.3 → rc.5 之间没有变化。
 - 只在 **Windows + DSH 桌面版**上实测过（Electron 自带 Node 24）。
 - 只解析 rollout 里**结构化**的事件；`ops_bash` 命令字符串里隐藏的产物不猜。
 - 窗口固定为最近 3 天、最多 24 条。更久的历史不读，因为「现在在跑什么」才是这个面板要回答的问题。

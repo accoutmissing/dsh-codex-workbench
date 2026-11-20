@@ -2,6 +2,18 @@
 
 Why each version exists, not just what changed.
 
+## 0.4.3 — 2026-11-20
+
+**宿主五天内从 0.2.2-rc.1 走到 rc.5，回头复核一遍：不用改代码，把验过的面写清楚。**
+
+功能代码零改动；发 patch 是为了让 tag 指向的说明与仓库里实际验过的东西是同一份。
+
+- **槽位没变。** rc.3 与 rc.5 的槽位目录都是 133 个，交集 133，两边各自独有 0 个。面板用的 `sidebar.right.pane.tab` 与胶囊用的 `shell.overlay` 都在（前者在 `dsh-client-ui-deliverables` 里注册，后者在 `dsh-client-ui-agent-team`）。
+- **读的启动图契约没变。** `clientModules.graph(): WebBootGraph`（`dsh-client-modules/lib/types/index.d.ts:110`），`WebBootGraph = { rev, release?, entries, batches }`、`WebBootEntry = { id, url, rev, inject?, immediately? }`（同包 `lib/types/client/manifest.d.ts:86-99` 与 `:48-61`）——正是面板里读 `graph.rev` 与 `entries[].{id,rev,immediately}` 的写法。
+- **实测。** `/plugins/codex-workbench/state` 回 200：`scanned: 100`、`skipped: 76`、`staleHost: false`、`hostStamp: 1793425392689.5315`；`client.graphRev: "920ca0d2c902"`、`client.total: 106`，其中 `@local/dsh-codex-workbench` 一行 `rev: "e694ea64a652"`、`immediately: true` —— 浏览器半部确实进了启动图。
+- **服务签名**：`sidebarRightTabs`、`ctx.webServer.register`（`dsh-host-webserver/lib/types/index.d.ts:193`）、`ctx.locale.register/bind`（`dsh-client-locale/lib/types/client/index.d.ts:209/226`）在 rc.5 上是同一组形状。
+- **范围没动。** `>=0.2.0-rc.1 <0.3.0-0` 在宿主口径（`semver.satisfies(range, { includePrerelease: true })`）下覆盖 `0.2.2-rc.5`。
+
 ## 0.4.2 — 2026-11-05
 
 **宿主升到 0.2.2-rc.1 后做了一轮兼容性复核：代码不用改，但清单该说的话要说上。**

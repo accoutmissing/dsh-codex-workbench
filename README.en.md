@@ -106,6 +106,7 @@ plugin_manager({ action: 'install_bundle',
 
 ## Compatibility and limits
 
+- **Verified against host 0.2.2-rc.5** (2026-11-20): no code change was needed; see the 0.4.3 entry of the [CHANGELOG](CHANGELOG.md). `engines.dsh` stays `>=0.2.0-rc.1 <0.3.0-0` and covers 0.2.2-rc.5 under the host's prerelease-inclusive reading; `clientModules.graph()` (`WebBootGraph { rev, entries[].{id,rev,immediately} }`), the `sidebar.right.pane.tab` and `shell.overlay` slots, `sidebarRightTabs`, `ctx.webServer` and `ctx.locale` are unchanged between rc.3 and rc.5.
 - Measured only on **Windows + the DSH desktop app** (Electron's Node 24).
 - Only structured rollout events are parsed; files hidden inside `ops_bash` command strings are deliberately not guessed at.
 - The window is the last 3 days and at most 24 rows. Older history is not read, because "what is running now" is the question this panel answers.
