@@ -15,6 +15,26 @@ window.__ModuleLoader__.load({
     const ROW_LIMIT = 12
     /** Right-sidebar tab kind. The same string is the type id and the body's slot key. */
     const TAB_KIND = 'codex-workbench'
+
+    /**
+     * Optional link to the terminals that are running right now.
+     *
+     * A Codex run lives in two places at once: its rollout file (what it already
+     * wrote) and the terminal it runs in (what is on screen this second). The file
+     * side is this plugin's own data; the terminal side belongs to dsh-herdr.
+     *
+     * The link is not a guess: herdr stamps every terminal it opens for Codex with
+     * `labels["alma.session"] = "codex:id:<session id>"`. Only that exact stamp is
+     * trusted. A directory match would pair the wrong rows whenever two runs share
+     * a cwd, so it is deliberately not used.
+     *
+     * herdr is optional. When it is not installed the route answers 404 once and
+     * the store pins `terminals: false`, which stops further requests and leaves
+     * the row layout exactly as it was.
+     */
+    const TERMINALS_ROUTE = '/plugins/dsh-herdr/api/terminals'
+    const TERM_LABEL_KEY = 'alma.session'
+    const TERM_ID_PREFIX = 'codex:id:'
     /** Filters over `threadSource`, in chip order. `all` first so it is the default. */
     const FILTERS = [
       { key: 'all', label: 'filterAll', match: () => true },
@@ -58,7 +78,10 @@ window.__ModuleLoader__.load({
       filterReview: '审查',
       filterSub: '子代理',
       guideTitle: 'Codex 派活台',
-      guideDescription: '每次派给 Codex 的任务：目录、时长、token、状态与本次产物。'
+      guideDescription: '每次派给 Codex 的任务：目录、时长、token、状态与本次产物。',
+      termOf: '终端 {address}',
+      termCopy: '已复制终端地址 {address}',
+      termHint: '这条派活在 herdr 终端 {address} 里跑 · 点一下复制终端地址'
     }
 
     const en = {
@@ -93,7 +116,10 @@ window.__ModuleLoader__.load({
       filterReview: 'Review',
       filterSub: 'Subagent',
       guideTitle: 'Codex workbench',
-      guideDescription: 'Every dispatch to Codex: directory, duration, tokens, state and the files that came out of it.'
+      guideDescription: 'Every dispatch to Codex: directory, duration, tokens, state and the files that came out of it.',
+      termOf: 'terminal {address}',
+      termCopy: 'Terminal address {address} copied',
+      termHint: 'This dispatch runs in herdr terminal {address} · click to copy the address'
     }
 
     const CSS = `
@@ -200,6 +226,13 @@ window.__ModuleLoader__.load({
 .cw-task{color:var(--cw-t2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
 .cw-meta{color:var(--cw-t3);font-size:11px;display:flex;gap:8px;white-space:nowrap;overflow:hidden;
   font-variant-numeric:tabular-nums}
+/* Terminal stamp: reads as a fact about the row, not as a call to action, so it
+   borrows the badge weight and only the border brightens on hover. */
+.cw-term{flex:none;font:inherit;font-size:10px;line-height:1.5;padding:0 5px;border-radius:4px;
+  color:var(--cw-t2);background:transparent;border:0.5px solid var(--cw-line);cursor:pointer;
+  transition:border-color var(--cw-feedback),color var(--cw-feedback)}
+.cw-term:hover{border-color:var(--cw-t3);color:var(--cw-t1)}
+.cw-term[data-copied="1"]{color:var(--cw-t1);border-color:var(--cw-t2)}
 .cw-detail{padding:8px 12px;border-top:0.5px solid var(--cw-sep);background:var(--cw-fill);
   animation:cw-detail-in var(--cw-reveal) both}
 @keyframes cw-detail-in{from{opacity:0;transform:translateY(-2px)}to{opacity:1;transform:translateY(0)}}
@@ -407,9 +440,18 @@ window.__ModuleLoader__.load({
 
     /** One store per page load, so a re-mounted slot keeps its answer and its open state. */
     const store = {
-      snap: { data: null, error: null, open: readOpen(), manual: false, pos: readPos() },
+      snap: {
+        data: null,
+        error: null,
+        open: readOpen(),
+        manual: false,
+        pos: readPos(),
+        // null = never asked, false = host has no herdr (stop asking), array = live terminals
+        terminals: null
+      },
       listeners: new Set(),
       busy: false,
+      termBusy: false,
       get() {
         return store.snap
       },
@@ -436,7 +478,52 @@ window.__ModuleLoader__.load({
         } finally {
           store.busy = false
         }
+      },
+      /**
+       * Ask dsh-herdr which terminals are alive. One 404 is enough to conclude the
+       * plugin is absent; after that the store keeps `false` and no further request
+       * is made, so an installation without herdr pays exactly one failed fetch.
+       */
+      async refreshTerminals() {
+        if (store.termBusy) return
+        if (store.snap.terminals === false) return
+        store.termBusy = true
+        try {
+          const response = await fetch(TERMINALS_ROUTE, { cache: 'no-store' })
+          if (response.status === 404) {
+            store.patch({ terminals: false })
+            return
+          }
+          const body = await response.json()
+          const list = body && body.ok === true && body.result ? body.result.terminals : null
+          if (!Array.isArray(list)) {
+            store.patch({ terminals: false })
+            return
+          }
+          store.patch({ terminals: list })
+        } catch (error) {
+          // A refused connection is also "not installed"; never let this break the list.
+          store.patch({ terminals: false })
+        } finally {
+          store.termBusy = false
+        }
       }
+    }
+
+    /**
+     * The terminal a session is running in, or null.
+     * Only herdr's own Codex stamp counts; anything else would be a guess.
+     */
+    function terminalOf(session, terminals) {
+      if (!Array.isArray(terminals)) return null
+      if (session === null || typeof session !== 'object') return null
+      if (typeof session.id !== 'string' || session.id === '') return null
+      const want = TERM_ID_PREFIX + session.id
+      for (const terminal of terminals) {
+        const labels = terminal === null || typeof terminal !== 'object' ? null : terminal.labels
+        if (labels !== null && typeof labels === 'object' && labels[TERM_LABEL_KEY] === want) return terminal
+      }
+      return null
     }
 
     function formatDuration(ms) {
@@ -491,8 +578,26 @@ window.__ModuleLoader__.load({
       return `${size}B`
     }
 
-    function Row({ session, selected, onSelect, t, index = 0 }) {
+    function Row({ session, selected, onSelect, t, index = 0, terminal = null }) {
       const stateKey = session.state === 'running' ? 'running' : session.state === 'done' ? 'done' : 'stale'
+      const [copied, setCopied] = useState(false)
+      const address = terminal !== null && typeof terminal.address === 'string' ? terminal.address : ''
+
+      const copyAddress = () => {
+        if (address === '') return
+        const done = () => {
+          setCopied(true)
+          window.setTimeout(() => setCopied(false), 1200)
+        }
+        // The address is four characters; the async clipboard API is a permission
+        // request in some contexts, so a silent failure still shows the attempt.
+        if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+          void navigator.clipboard.writeText(address).then(done, done)
+        } else {
+          done()
+        }
+      }
+
       return h(
         'div',
         {
@@ -517,10 +622,28 @@ window.__ModuleLoader__.load({
         // Review and subagent runs carry no user message and sometimes no counter at all;
         // an em dash on its own line reads as a rendering bug, so both lines are optional.
         session.task ? h('div', { className: 'cw-task' }, session.task) : null,
-        (session.tokens || session.lastTool || session.model)
+        (session.tokens || session.lastTool || session.model || address !== '')
           ? h(
               'div',
               { className: 'cw-meta' },
+              // No herdr, no stamp: the meta row keeps its previous shape exactly.
+              address === ''
+                ? null
+                : h(
+                    'button',
+                    {
+                      type: 'button',
+                      className: 'cw-term',
+                      'data-copied': copied ? '1' : '0',
+                      title: t('termHint').replace('{address}', address),
+                      onClick: (event) => {
+                        // The row toggles its detail on click; copying must not also open it.
+                        event.stopPropagation()
+                        copyAddress()
+                      }
+                    },
+                    copied ? t('termCopy').replace('{address}', address) : t('termOf').replace('{address}', address)
+                  ),
               session.tokens ? h('span', null, formatTokens(session.tokens)) : null,
               session.lastTool ? h('span', null, session.lastTool) : null,
               session.model ? h('span', null, session.model) : null
@@ -815,8 +938,9 @@ window.__ModuleLoader__.load({
                     h(Row, {
                       session,
                       index,
-                      selected: session.id === selected,
                       t,
+                      selected: session.id === selected,
+                      terminal: terminalOf(session, snap.terminals),
                       onSelect: () => setSelected(selected === session.id ? null : session.id)
                     }),
                     session.id === selected ? h(Detail, { session, t }) : null
@@ -953,6 +1077,7 @@ window.__ModuleLoader__.load({
                       index,
                       t,
                       selected: session.id === selected,
+                      terminal: terminalOf(session, snap.terminals),
                       onSelect: () => setSelected(selected === session.id ? null : session.id)
                     }),
                     session.id === selected ? h(Detail, { session, t }) : null
@@ -986,10 +1111,16 @@ window.__ModuleLoader__.load({
         ctx.effect(() => {
           let timer
           const tick = () => {
-            if (document.hidden !== true) void store.refresh()
+            if (document.hidden !== true) {
+              void store.refresh()
+              // Terminals move faster than rollouts; the store stops asking by itself
+              // once herdr is known to be absent.
+              void store.refreshTerminals()
+            }
             timer = window.setTimeout(tick, store.get().open ? POLL_OPEN_MS : POLL_CLOSED_MS)
           }
           void store.refresh()
+          void store.refreshTerminals()
           timer = window.setTimeout(tick, POLL_OPEN_MS)
           return () => window.clearTimeout(timer)
         }, 'codex-workbench: polling')
