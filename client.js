@@ -128,7 +128,12 @@ window.__ModuleLoader__.load({
      declaration invalid, so the panel had no background at all and read as transparent. The card
      surface token is --dsh-claude-card, and anything painted below still starts from an opaque base
      so a translucent skin cannot bring the transparency back. */
-  --cw-layer:var(--dsh-claude-layer-float,99999);
+  /* 置顶：胶囊和卡片都停在这一层。皮肤的 float token 是 99999，但本机实测同类浮层早就
+     越过它了（dsh-prompt / dsh-better-sidebar / dsh-windows-mcp 用 2147483000，
+     dsh-notify-me 用 2147483001，刚下线的 herdr 浮窗也是 2147483000 —— 它就在右下角，
+     把胶囊整个盖住了）。所以这里不用皮肤 token，直接压在测到的最高值之上一位。
+     仍然只是宿主 overlay 层内部的排序：模态、菜单这类由壳自己管。 */
+  --cw-layer:2147483002;
   --cw-surface:var(--dsh-claude-card,var(--dsw-alias-bg-overlay,#232323));
   --cw-base:var(--dsw-alias-bg-base,var(--dsh-claude-canvas,#191919));
   --cw-fill:var(--dsw-alias-bg-layer-3,rgba(255,255,255,.045));
